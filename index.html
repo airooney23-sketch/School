@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>School Finder — Carmel Valley, San Diego</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root{
+    --blue:#0071e3;
+    --blue-dark:#0060c0;
+    --ink:#1d1d1f;
+    --ink-soft:#6e6e73;
+    --hairline:rgba(0,0,0,0.08);
+    --panel-bg:rgba(255,255,255,0.78);
+    --card-bg:#ffffff;
+    --bg:#f5f5f7;
+    --green:#34c759;
+    --purple:#af52de;
+    --orange:#ff9500;
+    --radius-lg:20px;
+    --radius-md:14px;
+    --radius-sm:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;padding:0;height:100%;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Arial,sans-serif;
+    color:var(--ink);
+    background:var(--bg);
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+  #app{
+    display:flex;
+    position:fixed;
+    inset:0;
+  }
+
+  /* ---------- Sidebar ---------- */
+  #sidebar{
+    width:400px;
+    min-width:400px;
+    height:100%;
+    display:flex;
+    flex-direction:column;
+    background:var(--panel-bg);
+    backdrop-filter:blur(30px) saturate(180%);
+    -webkit-backdrop-filter:blur(30px) saturate(180%);
+    border-right:1px solid var(--hairline);
+    z-index:10;
+  }
+  .sidebar-header{
+    padding:22px 22px 14px 22px;
+    border-bottom:1px solid var(--hairline);
+  }
+  .app-title{
+    font-size:22px;
+    font-weight:700;
+    letter-spacing:-0.02em;
+    margin:0 0 2px 0;
+  }
+  .app-sub{
+    font-size:13px;
+    color:var(--ink-soft);
+    margin:0 0 16px 0;
+  }
+
+  .search-row{
+    display:flex;
+    gap:8px;
+  }
+  .search-input{
+    flex:1;
+    padding:11px 14px;
+    border-radius:var(--radius-sm);
+    border:1px solid var(--hairline);
+    background:rgba(118,118,128,0.08);
+    font-size:15px;
+    outline:none;
+    color:var(--ink);
+    transition:background .15s ease, box-shadow .15s ease;
+  }
+  .search-input:focus{
+    background:#fff;
+    box-shadow:0 0 0 4px rgba(0,113,227,0.15);
+    border-color:var(--blue);
+  }
+  .search-btn{
+    padding:0 18px;
+    border:none;
+    border-radius:var(--radius-sm);
+    background:var(--blue);
+    color:#fff;
+    font-size:15px;
+    font-weight:600;
+    cursor:pointer;
+    transition:background .15s ease, transform .05s ease;
+    white-space:nowrap;
+  }
+  .search-btn:hover{background:var(--blue-dark);}
+  .search-btn:active{transform:scale(0.97);}
+  .search-btn:disabled{background:#c7c7cc;cursor:default;}
+
+  .home-status{
+    margin-top:10px;
+    font-size:12.5px;
+    color:var(--ink-soft);
+    min-height:16px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .home-status.ok{color:var(--green);font-weight:600;}
+  .home-status.err{color:#ff3b30;font-weight:600;}
+  .coord-pill{
+    font-variant-numeric:tabular-nums;
+    background:rgba(0,0,0,0.05);
+    padding:2px 8px;
+    border-radius:20px;
+    font-size:11.5px;
+    color:var(--ink-soft);
+  }
+
+  /* segmented filter */
+  .filters{
+    padding:14px 22px 12px 22px;
+    border-bottom:1px solid var(--hairline);
+  }
+  .segmented{
+    display:flex;
+    background:rgba(118,118,128,0.12);
+    border-radius:var(--radius-sm);
+    padding:3px;
+    gap:2px;
+  }
+  .segmented button{
+    flex:1;
+    border:none;
+    background:transparent;
+    padding:7px 4px;
+    font-size:12.5px;
+    font-weight:600;
+    color:var(--ink-soft);
+    border-radius:8px;
+    cursor:pointer;
+    transition:all .15s ease;
+  }
+  .segmented button.active{
+    background:#fff;
+    color:var(--ink);
+    box-shadow:0 1px 3px rgba(0,0,0,0.12);
+  }
+  .toggle-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-top:12px;
+    font-size:13.5px;
+    color:var(--ink);
+  }
+  .switch{
+    position:relative;
+    width:42px;
+    height:25px;
+    flex-shrink:0;
+  }
+  .switch input{opacity:0;width:0;height:0;}
+  .slider{
+    position:absolute;cursor:pointer;inset:0;
+    background:#e9e9eb;
+    border-radius:25px;
+    transition:.2s;
+  }
+  .slider:before{
+    content:"";
+    position:absolute;
+    height:21px;width:21px;
+    left:2px;top:2px;
+    background:#fff;
+    border-radius:50%;
+    box-shadow:0 1px 3px rgba(0,0,0,0.3);
+    transition:.2s;
+  }
+  .switch input:checked + .slider{background:var(--green);}
+  .switch input:checked + .slider:before{transform:translateX(17px);}
+
+  /* list */
+  #school-list{
+    flex:1;
+    overflow-y:auto;
+    padding:10px 14px 20px 14px;
+  }
+  .list-meta{
+    font-size:11.5px;
+    color:var(--ink-soft);
+    padding:8px 8px 6px 8px;
+    text-transform:uppercase;
+    letter-spacing:0.03em;
+    font-weight:600;
+  }
+  .school-card{
+    background:var(--card-bg);
+    border-radius:var(--radius-md);
+    padding:13px 14px;
+    margin-bottom:8px;
+    cursor:pointer;
+    border:1.5px solid transparent;
+    box-shadow:0 1px 2px rgba(0,0,0,0.04);
+    transition:box-shadow .15s ease, border-color .15s ease, transform .08s ease;
+  }
+  .school-card:hover{
+    box-shadow:0 4px 14px rgba(0,0,0,0.09);
+    transform:translateY(-1px);
+  }
+  .school-card.selected{
+    border-color:var(--blue);
+    box-shadow:0 4px 14px rgba(0,113,227,0.18);
+  }
+  .card-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:8px;
+  }
+  .card-name{
+    font-size:14.5px;
+    font-weight:600;
+    line-height:1.3;
+    letter-spacing:-0.01em;
+  }
+  .card-dist{
+    font-size:13px;
+    font-weight:700;
+    color:var(--blue);
+    white-space:nowrap;
+    flex-shrink:0;
+  }
+  .card-addr{
+    font-size:12.5px;
+    color:var(--ink-soft);
+    margin-top:3px;
+    line-height:1.4;
+  }
+  .badge-row{
+    display:flex;
+    gap:6px;
+    margin-top:8px;
+    flex-wrap:wrap;
+  }
+  .badge{
+    font-size:10.5px;
+    font-weight:700;
+    padding:3px 8px;
+    border-radius:20px;
+    letter-spacing:0.01em;
+  }
+  .badge-elem{background:rgba(0,113,227,0.12);color:var(--blue);}
+  .badge-middle{background:rgba(255,149,0,0.14);color:var(--orange);}
+  .badge-high{background:rgba(175,82,222,0.14);color:var(--purple);}
+  .badge-public{background:rgba(52,199,89,0.14);color:#248a3d;}
+  .badge-private{background:rgba(255,59,48,0.12);color:#ff3b30;}
+  .card-coord{
+    margin-top:8px;
+    font-size:10.5px;
+    color:#a1a1a6;
+    font-variant-numeric:tabular-nums;
+  }
+  .empty-state{
+    text-align:center;
+    padding:40px 20px;
+    color:var(--ink-soft);
+    font-size:13.5px;
+  }
+
+  /* ---------- Map ---------- */
+  #map-wrap{
+    flex:1;
+    position:relative;
+  }
+  #map{
+    width:100%;
+    height:100%;
+  }
+  .leaflet-container{
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+    background:#eef0f2;
+  }
+
+  /* coordinate readout — top right, updates as you pan/click */
+  #coord-readout{
+    position:absolute;
+    top:18px;
+    right:18px;
+    z-index:500;
+    background:var(--panel-bg);
+    backdrop-filter:blur(20px) saturate(180%);
+    -webkit-backdrop-filter:blur(20px) saturate(180%);
+    border-radius:var(--radius-md);
+    padding:12px 16px;
+    box-shadow:0 4px 18px rgba(0,0,0,0.12);
+    border:1px solid var(--hairline);
+    min-width:230px;
+  }
+  #coord-readout .label{
+    font-size:10.5px;
+    font-weight:700;
+    color:var(--ink-soft);
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+    margin-bottom:4px;
+  }
+  #coord-readout .name{
+    font-size:14px;
+    font-weight:700;
+    margin-bottom:6px;
+    letter-spacing:-0.01em;
+  }
+  #coord-readout .coords{
+    font-size:13px;
+    font-variant-numeric:tabular-nums;
+    color:var(--blue);
+    font-weight:600;
+  }
+  #coord-readout .hint{
+    font-size:11px;
+    color:#a1a1a6;
+    margin-top:4px;
+  }
+
+  /* loading toast */
+  #loading-toast{
+    position:absolute;
+    bottom:24px;
+    left:50%;
+    transform:translateX(-50%);
+    background:rgba(29,29,31,0.88);
+    color:#fff;
+    padding:10px 20px;
+    border-radius:30px;
+    font-size:13px;
+    font-weight:500;
+    z-index:600;
+    display:none;
+    align-items:center;
+    gap:10px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.25);
+  }
+  #loading-toast.show{display:flex;}
+  .spinner{
+    width:14px;height:14px;
+    border:2px solid rgba(255,255,255,0.3);
+    border-top-color:#fff;
+    border-radius:50%;
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  #retry-banner{
+    position:absolute;
+    top:18px;
+    left:18px;
+    right:280px;
+    z-index:700;
+    display:none;
+    align-items:center;
+    gap:12px;
+    background:#fff;
+    border:1px solid rgba(255,59,48,0.25);
+    border-radius:var(--radius-md);
+    padding:12px 14px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.14);
+  }
+  #retry-banner.show{display:flex;}
+  .retry-icon{font-size:20px;flex-shrink:0;}
+  .retry-text{flex:1;min-width:0;}
+  .retry-title{font-size:13.5px;font-weight:700;color:var(--ink);}
+  .retry-sub{font-size:11.5px;color:var(--ink-soft);margin-top:2px;line-height:1.4;}
+  #retry-btn{
+    flex-shrink:0;
+    border:none;
+    background:var(--blue);
+    color:#fff;
+    font-size:13px;
+    font-weight:600;
+    padding:9px 16px;
+    border-radius:var(--radius-sm);
+    cursor:pointer;
+  }
+  #retry-btn:hover{background:var(--blue-dark);}
+
+  /* custom marker */
+  .school-pin{
+    width:30px;height:30px;
+    border-radius:50% 50% 50% 0;
+    transform:rotate(-45deg);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 2px 6px rgba(0,0,0,0.35);
+    border:2px solid #fff;
+  }
+  .school-pin.elem{background:var(--blue);}
+  .school-pin.middle{background:var(--orange);}
+  .school-pin.high{background:var(--purple);}
+  .school-pin span{
+    transform:rotate(45deg);
+    font-size:13px;
+  }
+  .home-pin{
+    width:34px;height:34px;
+    border-radius:50%;
+    background:var(--green);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 2px 8px rgba(0,0,0,0.4);
+    border:3px solid #fff;
+    font-size:16px;
+  }
+
+  .leaflet-popup-content-wrapper{
+    border-radius:16px;
+    box-shadow:0 8px 26px rgba(0,0,0,0.18);
+  }
+  .leaflet-popup-content{
+    margin:14px 16px;
+    min-width:200px;
+  }
+  .popup-name{font-size:15px;font-weight:700;margin-bottom:4px;letter-spacing:-0.01em;}
+  .popup-addr{font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;line-height:1.4;}
+  .popup-row{font-size:12px;color:var(--ink);margin-bottom:3px;}
+  .popup-coord{
+    margin-top:8px;
+    padding-top:8px;
+    border-top:1px solid var(--hairline);
+    font-size:11.5px;
+    color:var(--blue);
+    font-weight:600;
+    font-variant-numeric:tabular-nums;
+  }
+
+  /* scrollbar */
+  #school-list::-webkit-scrollbar{width:6px;}
+  #school-list::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.15);border-radius:10px;}
+
+  @media (max-width: 860px){
+    #sidebar{width:100%;min-width:0;position:absolute;height:48%;bottom:0;top:auto;border-right:none;border-top:1px solid var(--hairline);border-radius:20px 20px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,0.12);}
+    #sidebar::before{
+      content:"";
+      display:block;
+      width:36px;height:5px;
+      background:rgba(0,0,0,0.18);
+      border-radius:3px;
+      margin:8px auto 0 auto;
+    }
+    #map-wrap{height:100%;}
+    #app{flex-direction:column;}
+    #coord-readout{right:14px;left:14px;min-width:0;}
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <div class="app-title">School Finder</div>
+      <div class="app-sub">Carmel Valley &amp; San Diego 92130 지역 학교 탐색</div>
+
+      <div class="search-row">
+        <input id="home-input" class="search-input" type="text" placeholder="집 주소 입력 (예: Carmel Valley, San Diego, CA)" value="Carmel Valley, San Diego, CA">
+        <button id="home-btn" class="search-btn">찾기</button>
+      </div>
+      <div id="home-status" class="home-status"></div>
+    </div>
+
+    <div class="filters">
+      <div class="segmented" id="level-filter">
+        <button data-level="all" class="active">전체</button>
+        <button data-level="elem">초등</button>
+        <button data-level="middle">중등</button>
+        <button data-level="high">고등</button>
+      </div>
+      <div class="toggle-row">
+        <span>사립학교 포함</span>
+        <label class="switch">
+          <input type="checkbox" id="private-toggle" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div id="school-list"></div>
+  </div>
+
+  <div id="map-wrap">
+    <div id="map"></div>
+    <div id="coord-readout">
+      <div class="label">선택한 위치</div>
+      <div class="name" id="ro-name">지도를 클릭하거나 학교를 선택하세요</div>
+      <div class="coords" id="ro-coords">—</div>
+      <div class="hint" id="ro-hint"></div>
+    </div>
+    <div id="loading-toast"><div class="spinner"></div><span id="loading-text">학교 위치 불러오는 중…</span></div>
+    <div id="retry-banner">
+      <div class="retry-icon">⚠️</div>
+      <div class="retry-text">
+        <div class="retry-title">위치 정보를 불러오지 못했습니다</div>
+        <div class="retry-sub">인터넷 연결을 확인하거나, 이 파일을 Chrome 같은 실제 브라우저에서 열어보세요.</div>
+      </div>
+      <button id="retry-btn">다시 시도</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+/* =========================================================================
+   1) SCHOOL DATASET
+   Carmel Valley / San Diego 92130 일대 실제 학교 목록 (2025-2026 기준, 주소 검증)
+   좌표(lat/lng)는 하드코딩하지 않고 Nominatim(OpenStreetMap) 지오코딩으로
+   런타임에 주소 → 좌표 변환하여 정확도를 유지합니다.
+   ========================================================================= */
+const SCHOOLS = [
+  // ---- 초등 (Elementary) — 공립 (Del Mar Union School District) ----
+  {name:"Ashley Falls Elementary", level:"elem", type:"public", district:"Del Mar Union SD", grades:"K-6", address:"13030 Ashley Falls Dr, San Diego, CA 92130", phone:"(858) 259-7812"},
+  {name:"Carmel Del Mar Elementary", level:"elem", type:"public", district:"Del Mar Union SD", grades:"K-6", address:"12345 Carmel Park Dr, San Diego, CA 92130", phone:"(858) 481-6789"},
+  {name:"Del Mar Heights Elementary", level:"elem", type:"public", district:"Del Mar Union SD", grades:"K-6", address:"13555 Boquita Dr, Del Mar, CA 92014", phone:""},
+  {name:"Del Mar Hills Academy", level:"elem", type:"public", district:"Del Mar Union SD", grades:"K-6", address:"14085 Mango Dr, Del Mar, CA 92014", phone:""},
+  {name:"Ocean Air Elementary", level:"elem", type:"public", district:"Del Mar Union SD", grades:"K-6", address:"11444 Canter Heights Dr, San Diego, CA 92130", phone:""},
+  {name:"Pacific Sky Elementary", level:"elem", type:"public", district:"Del Mar Union SD", grades:"K-6", address:"6631 Solterra Vista Pkwy, San Diego, CA 92130", phone:""},
+  {name:"Sage Canyon Elementary", level:"elem", type:"public", district:"Del Mar Union SD", grades:"K-6", address:"5290 Harvest Run Dr, San Diego, CA 92130", phone:"(858) 481-7844"},
+  {name:"Sycamore Ridge Elementary", level:"elem", type:"public", district:"Del Mar Union SD", grades:"K-6", address:"5333 Old Carmel Valley Rd, San Diego, CA 92130", phone:"(858) 755-1060"},
+  {name:"Torrey Hills Elementary", level:"elem", type:"public", district:"Del Mar Union SD", grades:"K-6", address:"10830 Calle Mar De Mariposa, San Diego, CA 92130", phone:"(858) 481-4266"},
+
+  // ---- 초등 — 공립 (Solana Beach School District) ----
+  {name:"Carmel Creek Elementary", level:"elem", type:"public", district:"Solana Beach SD", grades:"K-3", address:"4210 Carmel Center Rd, San Diego, CA 92130", phone:"(858) 794-4400"},
+  {name:"Solana Highlands Elementary", level:"elem", type:"public", district:"Solana Beach SD", grades:"K-6", address:"3520 Long Run Dr, San Diego, CA 92130", phone:"(858) 794-4300"},
+  {name:"Solana Pacific Elementary", level:"elem", type:"public", district:"Solana Beach SD", grades:"4-6", address:"3901 Townsgate Dr, San Diego, CA 92130", phone:""},
+  {name:"Solana Ranch Elementary", level:"elem", type:"public", district:"Solana Beach SD", grades:"K-6", address:"13605 Pacific Highlands Ranch Pkwy, San Diego, CA 92130", phone:"(858) 350-6600"},
+
+  // ---- 중등 (Middle) — 공립 (San Dieguito Union HSD) ----
+  {name:"Carmel Valley Middle School", level:"middle", type:"public", district:"San Dieguito Union HSD", grades:"7-8", address:"3800 Mykonos Ln, San Diego, CA 92130", phone:"(858) 481-8221"},
+  {name:"Pacific Trails Middle School", level:"middle", type:"public", district:"San Dieguito Union HSD", grades:"7-8", address:"5975 Village Center Loop Rd, San Diego, CA 92130", phone:"(858) 350-0253"},
+
+  // ---- 고등 (High) — 공립 (San Dieguito Union HSD) ----
+  {name:"Torrey Pines High School", level:"high", type:"public", district:"San Dieguito Union HSD", grades:"9-12", address:"3710 Del Mar Heights Rd, San Diego, CA 92130", phone:"(858) 755-0120"},
+  {name:"Canyon Crest Academy", level:"high", type:"public", district:"San Dieguito Union HSD", grades:"9-12", address:"5951 Village Center Loop Rd, San Diego, CA 92130", phone:"(858) 350-0253"},
+
+  // ---- 사립 (Private) ----
+  {name:"San Diego Jewish Academy", level:"elem", type:"private", district:"Private (K-12)", grades:"K-12", address:"11860 Carmel Creek Rd, San Diego, CA 92130", phone:"(858) 704-3700"},
+  {name:"Cathedral Catholic High School", level:"high", type:"private", district:"Private (Catholic)", grades:"9-12", address:"5555 Del Mar Heights Rd, San Diego, CA 92130", phone:""},
+  {name:"Del Mar Pines School", level:"elem", type:"private", district:"Private", grades:"K-6", address:"3975 Torrington St, San Diego, CA 92130", phone:""},
+  {name:"Notre Dame Academy", level:"elem", type:"private", district:"Private (Catholic)", grades:"K-8", address:"4345 Del Mar Trails Rd, San Diego, CA 92130", phone:""},
+];
+
+const LEVEL_LABEL = {elem:"초등", middle:"중등", high:"고등"};
+const LEVEL_BADGE_CLASS = {elem:"badge-elem", middle:"badge-middle", high:"badge-high"};
+const LEVEL_PIN_CLASS = {elem:"elem", middle:"middle", high:"high"};
+const LEVEL_ICON = {elem:"🎒", middle:"📘", high:"🎓"};
+
+/* =========================================================================
+   2) GEOCODING (Nominatim / OpenStreetMap — 무료, API 키 불필요)
+   Nominatim 사용 정책상 초당 1회 요청 제한 → 순차 큐 처리 + 캐시(localStorage)
+   ========================================================================= */
+const GEOCODE_CACHE_KEY = "sd_school_finder_geocode_cache_v1";
+function loadCache(){
+  try{ return JSON.parse(localStorage.getItem(GEOCODE_CACHE_KEY) || "{}"); }
+  catch(e){ return {}; }
+}
+function saveCache(cache){
+  try{ localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(cache)); }catch(e){}
+}
+let geocodeCache = loadCache();
+
+// 1순위: Photon (komoot 운영, 무료·키 불필요, CORS 우호적, Nominatim보다 빠르고 관대함)
+async function geocodeViaPhoton(address){
+  const url = "https://photon.komoot.io/api/?limit=1&osm_tag=amenity:school&q=" + encodeURIComponent(address);
+  const res = await fetch(url);
+  if(!res.ok) throw new Error("photon http " + res.status);
+  const data = await res.json();
+  const f = data && data.features && data.features[0];
+  if(!f) throw new Error("photon no result");
+  return { lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] };
+}
+// 2순위(폴백): Nominatim (OpenStreetMap 공식, 초당 1회 제한 준수 필요)
+async function geocodeViaNominatim(address){
+  const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=" + encodeURIComponent(address);
+  const res = await fetch(url, { headers: { "Accept-Language": "en" } });
+  if(!res.ok) throw new Error("nominatim http " + res.status);
+  const data = await res.json();
+  if(!data || !data.length) throw new Error("nominatim no result");
+  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+}
+
+async function geocodeAddress(address){
+  if(geocodeCache[address]){
+    return geocodeCache[address];
+  }
+  let result;
+  try{
+    result = await geocodeViaPhoton(address);
+  }catch(photonErr){
+    console.warn("Photon 실패, Nominatim으로 재시도:", address, photonErr.message);
+    result = await geocodeViaNominatim(address); // 실패하면 여기서 throw되어 상위로 전달됨
+  }
+  geocodeCache[address] = result;
+  saveCache(geocodeCache);
+  return result;
+}
+
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+async function geocodeQueue(items, onEach, onProgress){
+  let successCount = 0;
+  for(let i=0;i<items.length;i++){
+    try{
+      const coords = await geocodeAddress(items[i].address);
+      items[i].lat = coords.lat;
+      items[i].lng = coords.lng;
+      items[i].geocodeFailed = false;
+      successCount++;
+      onEach(items[i], i);
+    }catch(err){
+      console.warn("geocode error:", items[i].name, err.message || err);
+      items[i].geocodeFailed = true;
+    }
+    if(onProgress) onProgress(i+1, items.length);
+    // Photon은 관대하지만 예의상 짧은 간격은 유지 (캐시된 항목은 대기 없이 즉시 처리됨)
+    if(i < items.length - 1) await sleep(300);
+  }
+  return successCount;
+}
+
+/* =========================================================================
+   3) MAP SETUP (Leaflet + CartoDB Positron — 애플 지도 느낌의 밝고 깔끔한 타일)
+   ========================================================================= */
+const map = L.map('map', { zoomControl: false }).setView([32.9425, -117.2378], 13); // Carmel Valley 중심
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap &copy; CARTO',
+  subdomains: 'abcd',
+  maxZoom: 19
+}).addTo(map);
+
+function makeSchoolIcon(level){
+  return L.divIcon({
+    className: '',
+    html: `<div class="school-pin ${LEVEL_PIN_CLASS[level]}"><span>${LEVEL_ICON[level]}</span></div>`,
+    iconSize: [30,30],
+    iconAnchor: [15,29],
+    popupAnchor: [0,-28]
+  });
+}
+const homeIcon = L.divIcon({
+  className: '',
+  html: `<div class="home-pin">🏠</div>`,
+  iconSize: [34,34],
+  iconAnchor: [17,17],
+  popupAnchor: [0,-17]
+});
+
+let homeMarker = null;
+let homeCoords = null;
+const schoolMarkers = []; // {school, marker}
+
+/* =========================================================================
+   4) DISTANCE (Haversine, miles)
+   ========================================================================= */
+function haversineMiles(lat1, lng1, lat2, lng2){
+  const R = 3958.8;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+function fmtCoord(lat, lng){
+  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+
+/* =========================================================================
+   5) UI — Coordinate Readout
+   ========================================================================= */
+const roName = document.getElementById('ro-name');
+const roCoords = document.getElementById('ro-coords');
+const roHint = document.getElementById('ro-hint');
+function updateReadout(name, lat, lng, hint){
+  roName.textContent = name;
+  roCoords.textContent = fmtCoord(lat, lng);
+  roHint.textContent = hint || "";
+}
+map.on('click', (e) => {
+  updateReadout("클릭한 지점", e.latlng.lat, e.latlng.lng, "지도를 클릭하면 좌표가 여기에 표시됩니다");
+});
+
+/* =========================================================================
+   6) LOADING TOAST
+   ========================================================================= */
+const toast = document.getElementById('loading-toast');
+const toastText = document.getElementById('loading-text');
+function showToast(text){ toastText.textContent = text; toast.classList.add('show'); }
+function hideToast(){ toast.classList.remove('show'); }
+
+/* =========================================================================
+   7) SIDEBAR LIST RENDERING
+   ========================================================================= */
+let currentLevelFilter = 'all';
+let showPrivate = true;
+let selectedSchool = null;
+
+function filteredSchools(){
+  return SCHOOLS.filter(s => {
+    if(!s.lat) return false; // 아직 지오코딩 안 됨
+    if(currentLevelFilter !== 'all' && s.level !== currentLevelFilter) return false;
+    if(!showPrivate && s.type === 'private') return false;
+    return true;
+  });
+}
+
+function renderList(){
+  const list = document.getElementById('school-list');
+  let schools = filteredSchools();
+
+  if(homeCoords){
+    schools.forEach(s => { s._dist = haversineMiles(homeCoords.lat, homeCoords.lng, s.lat, s.lng); });
+    schools.sort((a,b) => a._dist - b._dist);
+  } else {
+    schools.sort((a,b) => a.name.localeCompare(b.name));
+  }
+
+  if(schools.length === 0){
+    list.innerHTML = `<div class="empty-state">조건에 맞는 학교가 없습니다.<br>필터를 조정해 보세요.</div>`;
+    return;
+  }
+
+  const metaLabel = homeCoords ? "집에서 가까운 순" : "학교 목록 (거리순 정렬은 집 주소 입력 후)";
+  let html = `<div class="list-meta">${metaLabel} · ${schools.length}개</div>`;
+
+  schools.forEach(s => {
+    const distText = s._dist !== undefined ? `${s._dist.toFixed(1)} mi` : "";
+    const selectedClass = selectedSchool === s ? "selected" : "";
+    html += `
+      <div class="school-card ${selectedClass}" data-name="${s.name.replace(/"/g,'&quot;')}">
+        <div class="card-top">
+          <div class="card-name">${s.name}</div>
+          ${distText ? `<div class="card-dist">${distText}</div>` : ""}
+        </div>
+        <div class="card-addr">${s.address}</div>
+        <div class="badge-row">
+          <span class="badge ${LEVEL_BADGE_CLASS[s.level]}">${LEVEL_LABEL[s.level]} · ${s.grades}</span>
+          <span class="badge ${s.type === 'public' ? 'badge-public' : 'badge-private'}">${s.type === 'public' ? '공립' : '사립'}</span>
+        </div>
+        <div class="card-coord">${fmtCoord(s.lat, s.lng)}</div>
+      </div>`;
+  });
+  list.innerHTML = html;
+
+  list.querySelectorAll('.school-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const s = SCHOOLS.find(x => x.name === card.dataset.name);
+      if(s) selectSchool(s);
+    });
+  });
+}
+
+function selectSchool(s){
+  selectedSchool = s;
+  renderList();
+  map.flyTo([s.lat, s.lng], 15, { duration: 0.6 });
+  const entry = schoolMarkers.find(m => m.school === s);
+  if(entry) entry.marker.openPopup();
+  const distText = homeCoords ? ` · 집에서 ${haversineMiles(homeCoords.lat, homeCoords.lng, s.lat, s.lng).toFixed(1)} mi` : "";
+  updateReadout(s.name, s.lat, s.lng, `${LEVEL_LABEL[s.level]} · ${s.type === 'public' ? '공립' : '사립'}${distText}`);
+}
+
+/* =========================================================================
+   8) MARKERS
+   ========================================================================= */
+function buildPopupHtml(s){
+  const distText = homeCoords ? `<div class="popup-row">🏠 집에서 <b>${haversineMiles(homeCoords.lat, homeCoords.lng, s.lat, s.lng).toFixed(1)} mi</b></div>` : "";
+  return `
+    <div class="popup-name">${s.name}</div>
+    <div class="popup-addr">${s.address}</div>
+    <div class="popup-row">${LEVEL_LABEL[s.level]} (${s.grades}) · ${s.type === 'public' ? '공립' : '사립'} · ${s.district}</div>
+    ${s.phone ? `<div class="popup-row">📞 ${s.phone}</div>` : ""}
+    ${distText}
+    <div class="popup-coord">${fmtCoord(s.lat, s.lng)}</div>
+  `;
+}
+
+function addSchoolMarker(s){
+  const marker = L.marker([s.lat, s.lng], { icon: makeSchoolIcon(s.level) }).addTo(map);
+  marker.bindPopup(buildPopupHtml(s));
+  marker.on('click', () => {
+    selectedSchool = s;
+    renderList();
+    const distText = homeCoords ? ` · 집에서 ${haversineMiles(homeCoords.lat, homeCoords.lng, s.lat, s.lng).toFixed(1)} mi` : "";
+    updateReadout(s.name, s.lat, s.lng, `${LEVEL_LABEL[s.level]} · ${s.type === 'public' ? '공립' : '사립'}${distText}`);
+  });
+  schoolMarkers.push({ school: s, marker });
+}
+
+function refreshAllPopups(){
+  schoolMarkers.forEach(({school, marker}) => marker.setPopupContent(buildPopupHtml(school)));
+}
+
+/* =========================================================================
+   9) HOME ADDRESS SEARCH
+   ========================================================================= */
+const homeInput = document.getElementById('home-input');
+const homeBtn = document.getElementById('home-btn');
+const homeStatus = document.getElementById('home-status');
+
+async function setHome(address){
+  homeStatus.className = 'home-status';
+  homeStatus.textContent = '주소 검색 중…';
+  homeBtn.disabled = true;
+  try{
+    const coords = await geocodeAddress(address);
+    homeCoords = coords;
+    if(homeMarker) map.removeLayer(homeMarker);
+    homeMarker = L.marker([coords.lat, coords.lng], { icon: homeIcon }).addTo(map);
+    homeMarker.bindPopup(`<div class="popup-name">🏠 우리 집</div><div class="popup-addr">${address}</div><div class="popup-coord">${fmtCoord(coords.lat, coords.lng)}</div>`);
+    map.flyTo([coords.lat, coords.lng], 14, { duration: 0.7 });
+    homeStatus.className = 'home-status ok';
+    homeStatus.innerHTML = `✓ 집 위치 설정됨 <span class="coord-pill">${fmtCoord(coords.lat, coords.lng)}</span>`;
+    updateReadout("우리 집", coords.lat, coords.lng, "학교 카드를 클릭하면 거리와 좌표가 표시됩니다");
+    refreshAllPopups();
+    renderList();
+  }catch(err){
+    homeStatus.className = 'home-status err';
+    homeStatus.textContent = '주소를 찾을 수 없습니다. 더 구체적으로 입력해보세요.';
+    console.error(err);
+  }finally{
+    homeBtn.disabled = false;
+  }
+}
+homeBtn.addEventListener('click', () => {
+  const v = homeInput.value.trim();
+  if(v) setHome(v);
+});
+homeInput.addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){ homeBtn.click(); }
+});
+
+/* =========================================================================
+   10) FILTERS
+   ========================================================================= */
+document.querySelectorAll('#level-filter button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#level-filter button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentLevelFilter = btn.dataset.level;
+    applyMarkerVisibility();
+    renderList();
+  });
+});
+document.getElementById('private-toggle').addEventListener('change', (e) => {
+  showPrivate = e.target.checked;
+  applyMarkerVisibility();
+  renderList();
+});
+function applyMarkerVisibility(){
+  schoolMarkers.forEach(({school, marker}) => {
+    const levelOk = currentLevelFilter === 'all' || school.level === currentLevelFilter;
+    const typeOk = showPrivate || school.type === 'public';
+    const visible = levelOk && typeOk && school.lat;
+    if(visible && !map.hasLayer(marker)) marker.addTo(map);
+    if(!visible && map.hasLayer(marker)) map.removeLayer(marker);
+  });
+}
+
+/* =========================================================================
+   11) INIT — 학교 주소 지오코딩 후 마커 생성
+   ========================================================================= */
+const retryBanner = document.getElementById('retry-banner');
+const retryBtn = document.getElementById('retry-btn');
+
+async function init(){
+  retryBanner.classList.remove('show');
+  showToast(`학교 위치 불러오는 중… (0/${SCHOOLS.length})`);
+
+  // 이미 마커가 있는 항목(재시도 시)은 건드리지 않고, 아직 좌표 없는 학교만 다시 시도
+  const pending = SCHOOLS.filter(s => !s.lat);
+
+  const successCount = await geocodeQueue(
+    pending,
+    (school) => {
+      if(school.lat && !schoolMarkers.some(m => m.school === school)){
+        addSchoolMarker(school);
+        renderList();
+      }
+    },
+    (done, total) => showToast(`학교 위치 불러오는 중… (${done}/${total})`)
+  );
+
+  hideToast();
+  renderList();
+
+  const totalLoaded = SCHOOLS.filter(s => s.lat).length;
+  if(totalLoaded === 0){
+    // 전부 실패 = 네트워크 자체가 막혀있을 가능성이 높음
+    retryBanner.classList.add('show');
+  } else if(totalLoaded < SCHOOLS.length){
+    console.warn(`${SCHOOLS.length - totalLoaded}개 학교 위치를 불러오지 못했습니다. "다시 시도"로 재조회할 수 있습니다.`);
+  }
+
+  // 초기 집 주소가 입력되어 있으면 자동 검색 (최초 1회만)
+  if(!homeCoords && homeInput.value.trim()) setHome(homeInput.value.trim());
+}
+
+retryBtn.addEventListener('click', () => { init(); });
+
+init();
+</script>
+</body>
+</html>
