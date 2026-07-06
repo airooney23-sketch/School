@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>School Finder — San Diego County</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+<style>
+  :root{
+    --blue:#0071e3; --blue-dark:#0060c0;
+    --ink:#1d1d1f; --ink-soft:#6e6e73;
+    --hairline:rgba(0,0,0,0.08);
+    --panel-bg:rgba(255,255,255,0.78);
+    --card-bg:#ffffff; --bg:#f5f5f7;
+    --green:#34c759; --purple:#af52de; --orange:#ff9500; --gray:#8e8e93;
+    --radius-md:14px; --radius-sm:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;padding:0;height:100%;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Arial,sans-serif;
+    color:var(--ink); background:var(--bg);
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+  #app{ display:flex; position:fixed; inset:0; }
+
+  #sidebar{
+    width:400px; min-width:400px; height:100%;
+    display:flex; flex-direction:column;
+    background:var(--panel-bg);
+    backdrop-filter:blur(30px) saturate(180%);
+    -webkit-backdrop-filter:blur(30px) saturate(180%);
+    border-right:1px solid var(--hairline); z-index:10;
+  }
+  .sidebar-header{ padding:20px 22px 12px 22px; border-bottom:1px solid var(--hairline); }
+  .app-title{ font-size:22px; font-weight:700; letter-spacing:-0.02em; margin:0 0 2px 0; }
+  .app-sub{ font-size:12.5px; color:var(--ink-soft); margin:0 0 12px 0; }
+
+  .search-row{ display:flex; gap:8px; }
+  .search-input{
+    flex:1; padding:11px 14px; border-radius:var(--radius-sm);
+    border:1px solid var(--hairline); background:rgba(118,118,128,0.08);
+    font-size:15px; outline:none; color:var(--ink);
+    transition:background .15s ease, box-shadow .15s ease;
+  }
+  .search-input:focus{ background:#fff; box-shadow:0 0 0 4px rgba(0,113,227,0.15); border-color:var(--blue); }
+  .search-btn{
+    padding:0 18px; border:none; border-radius:var(--radius-sm);
+    background:var(--blue); color:#fff; font-size:15px; font-weight:600;
+    cursor:pointer; white-space:nowrap;
+  }
+  .search-btn:hover{ background:var(--blue-dark); }
+  .search-btn:active{ transform:scale(0.97); }
+  .search-btn:disabled{ background:#c7c7cc; cursor:default; }
+
+  .home-status{ margin-top:9px; font-size:12.5px; color:var(--ink-soft); min-height:16px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .home-status.ok{ color:var(--green); font-weight:600; }
+  .home-status.err{ color:#ff3b30; font-weight:600; }
+  .coord-pill{ font-variant-numeric:tabular-nums; background:rgba(0,0,0,0.05); padding:2px 8px; border-radius:20px; font-size:11.5px; color:var(--ink-soft); }
+
+  .filters{ padding:12px 22px 12px 22px; border-bottom:1px solid var(--hairline); }
+  .filter-label{ font-size:11px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.04em; margin:10px 0 5px 0; }
+  .filter-label:first-child{ margin-top:0; }
+  .segmented{ display:flex; background:rgba(118,118,128,0.12); border-radius:var(--radius-sm); padding:3px; gap:2px; }
+  .segmented button{
+    flex:1; border:none; background:transparent; padding:7px 2px;
+    font-size:11.5px; font-weight:600; color:var(--ink-soft); border-radius:8px; cursor:pointer;
+    white-space:nowrap; transition:all .15s ease;
+  }
+  .segmented button.active{ background:#fff; color:var(--ink); box-shadow:0 1px 3px rgba(0,0,0,0.12); }
+  #name-search{ margin-top:2px; }
+
+  #school-list{ flex:1; overflow-y:auto; padding:10px 14px 20px 14px; }
+  .list-meta{ font-size:11.5px; color:var(--ink-soft); padding:8px 8px 6px 8px; text-transform:uppercase; letter-spacing:0.03em; font-weight:600; }
+  .list-cap-note{ font-size:11.5px; color:var(--ink-soft); text-align:center; padding:14px 10px 6px 10px; line-height:1.5; }
+  .school-card{
+    background:var(--card-bg); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:8px;
+    cursor:pointer; border:1.5px solid transparent; box-shadow:0 1px 2px rgba(0,0,0,0.04);
+    transition:box-shadow .15s ease, border-color .15s ease;
+  }
+  .school-card:hover{ box-shadow:0 4px 14px rgba(0,0,0,0.09); }
+  .school-card.selected{ border-color:var(--blue); box-shadow:0 4px 14px rgba(0,113,227,0.18); }
+  .card-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .card-name{ font-size:14px; font-weight:600; line-height:1.3; letter-spacing:-0.01em; }
+  .card-dist{ font-size:13px; font-weight:700; color:var(--blue); white-space:nowrap; flex-shrink:0; }
+  .card-addr{ font-size:12px; color:var(--ink-soft); margin-top:3px; line-height:1.4; }
+  .badge-row{ display:flex; gap:6px; margin-top:7px; flex-wrap:wrap; }
+  .badge{ font-size:10.5px; font-weight:700; padding:3px 8px; border-radius:20px; }
+  .badge-elem{ background:rgba(0,113,227,0.12); color:var(--blue); }
+  .badge-middle{ background:rgba(255,149,0,0.14); color:var(--orange); }
+  .badge-high{ background:rgba(175,82,222,0.14); color:var(--purple); }
+  .badge-other{ background:rgba(142,142,147,0.14); color:var(--gray); }
+  .badge-private{ background:rgba(255,59,48,0.12); color:#ff3b30; }
+  .badge-charter{ background:rgba(52,199,89,0.14); color:#248a3d; }
+  .card-coord{ margin-top:7px; font-size:10.5px; color:#a1a1a6; font-variant-numeric:tabular-nums; }
+  .empty-state{ text-align:center; padding:40px 20px; color:var(--ink-soft); font-size:13.5px; line-height:1.6; }
+
+  #map-wrap{ flex:1; position:relative; }
+  #map{ width:100%; height:100%; }
+  .leaflet-container{ font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif; background:#eef0f2; }
+
+  #coord-readout{
+    position:absolute; top:18px; right:18px; z-index:500;
+    background:var(--panel-bg); backdrop-filter:blur(20px) saturate(180%); -webkit-backdrop-filter:blur(20px) saturate(180%);
+    border-radius:var(--radius-md); padding:12px 16px; box-shadow:0 4px 18px rgba(0,0,0,0.12);
+    border:1px solid var(--hairline); min-width:230px;
+  }
+  #coord-readout.hidden{ display:none; }
+  #readout-close{
+    position:absolute; top:8px; right:8px; width:22px; height:22px; border:none; border-radius:50%;
+    background:rgba(0,0,0,0.06); color:var(--ink-soft); font-size:12px; line-height:22px; text-align:center; padding:0; cursor:pointer;
+  }
+  #readout-close:hover{ background:rgba(0,0,0,0.12); }
+  #coord-readout .label{ font-size:10.5px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; }
+  #coord-readout .name{ font-size:14px; font-weight:700; margin-bottom:6px; }
+  #coord-readout .coords{ font-size:13px; font-variant-numeric:tabular-nums; color:var(--blue); font-weight:600; }
+  #coord-readout .hint{ font-size:11px; color:#a1a1a6; margin-top:4px; }
+
+  #loading-toast{
+    position:absolute; bottom:24px; left:50%; transform:translateX(-50%);
+    background:rgba(29,29,31,0.88); color:#fff; padding:10px 20px; border-radius:30px;
+    font-size:13px; font-weight:500; z-index:600; display:none; align-items:center; gap:10px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.25); max-width:85%; text-align:center;
+  }
+  #loading-toast.show{ display:flex; }
+  .spinner{ width:14px; height:14px; border:2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; flex-shrink:0; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .school-pin{
+    width:28px; height:28px; border-radius:50% 50% 50% 0; transform:rotate(-45deg);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 6px rgba(0,0,0,0.35); border:2px solid #fff;
+  }
+  .school-pin.elem{ background:var(--blue); }
+  .school-pin.middle{ background:var(--orange); }
+  .school-pin.high{ background:var(--purple); }
+  .school-pin.other{ background:var(--gray); }
+  .school-pin span{ transform:rotate(45deg); font-size:12px; }
+  .home-pin{
+    width:34px; height:34px; border-radius:50%; background:var(--green);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 8px rgba(0,0,0,0.4); border:3px solid #fff; font-size:16px;
+  }
+  .cluster-pin{
+    width:40px; height:40px; border-radius:50%;
+    background:rgba(0,113,227,0.88); border:3px solid #fff; color:#fff;
+    font-weight:700; font-size:13px; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 10px rgba(0,0,0,0.3);
+  }
+  .cluster-pin.mid{ background:rgba(255,149,0,0.88); }
+  .cluster-pin.large{ background:rgba(255,59,48,0.85); }
+
+  .leaflet-popup-content-wrapper{ border-radius:16px; box-shadow:0 8px 26px rgba(0,0,0,0.18); }
+  .leaflet-popup-content{ margin:14px 16px; min-width:200px; }
+  .popup-name{ font-size:15px; font-weight:700; margin-bottom:4px; }
+  .popup-addr{ font-size:12.5px; color:var(--ink-soft); margin-bottom:8px; line-height:1.4; }
+  .popup-row{ font-size:12px; color:var(--ink); margin-bottom:3px; }
+  .popup-coord{ margin-top:8px; padding-top:8px; border-top:1px solid var(--hairline); font-size:11.5px; color:var(--blue); font-weight:600; font-variant-numeric:tabular-nums; }
+
+  #school-list::-webkit-scrollbar{ width:6px; }
+  #school-list::-webkit-scrollbar-thumb{ background:rgba(0,0,0,0.15); border-radius:10px; }
+
+  #retry-banner{
+    position:absolute; top:18px; left:18px; right:18px; z-index:700; display:none; align-items:center; gap:12px;
+    background:#fff; border:1px solid rgba(255,59,48,0.25); border-radius:var(--radius-md); padding:12px 14px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.14);
+  }
+  #retry-banner.show{ display:flex; }
+  .retry-icon{ font-size:20px; flex-shrink:0; }
+  .retry-text{ flex:1; min-width:0; }
+  .retry-title{ font-size:13.5px; font-weight:700; }
+  .retry-sub{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; line-height:1.4; }
+  #retry-btn{ flex-shrink:0; border:none; background:var(--blue); color:#fff; font-size:13px; font-weight:600; padding:9px 16px; border-radius:var(--radius-sm); cursor:pointer; }
+
+  @media (max-width: 860px){
+    html,body{ height:auto; min-height:100%; overflow-y:auto; overflow-x:hidden; }
+    #app{ position:static; flex-direction:column; height:auto; }
+    #sidebar{ position:static; order:1; width:100%; min-width:0; height:50vh; min-height:380px; border-right:none; }
+    #map-wrap{ order:2; height:50vh; min-height:320px; flex:none; }
+    #coord-readout{ right:14px; left:14px; min-width:0; }
+    #retry-banner{ right:14px; left:14px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <div class="app-title">School Finder</div>
+      <div class="app-sub">샌디에고 카운티 전체 공립 초·중·고 (캘리포니아 교육부 공식 데이터)</div>
+      <div class="search-row">
+        <input id="home-input" class="search-input" type="text" placeholder="집 주소 입력" value="Carmel Valley, San Diego, CA">
+        <button id="home-btn" class="search-btn">찾기</button>
+      </div>
+      <div id="home-status" class="home-status"></div>
+    </div>
+
+    <div class="filters">
+      <div class="filter-label">학교 급별</div>
+      <div class="segmented" id="level-filter">
+        <button data-level="all" class="active">전체</button>
+        <button data-level="elem">초등</button>
+        <button data-level="middle">중등</button>
+        <button data-level="high">고등</button>
+      </div>
+      <div class="filter-label">집에서 거리</div>
+      <div class="segmented" id="radius-filter">
+        <button data-radius="5">5mi</button>
+        <button data-radius="10" class="active">10mi</button>
+        <button data-radius="15">15mi</button>
+        <button data-radius="25">25mi</button>
+        <button data-radius="9999">전체</button>
+      </div>
+      <div class="filter-label">이름 검색</div>
+      <input id="name-search" class="search-input" type="text" placeholder="예: Torrey Pines">
+    </div>
+
+    <div id="school-list"></div>
+  </div>
+
+  <div id="map-wrap">
+    <div id="map"></div>
+    <div id="coord-readout" class="hidden">
+      <button id="readout-close" aria-label="닫기">✕</button>
+      <div class="label">선택한 위치</div>
+      <div class="name" id="ro-name"></div>
+      <div class="coords" id="ro-coords">—</div>
+      <div class="hint" id="ro-hint"></div>
+    </div>
+    <div id="loading-toast"><div class="spinner"></div><span id="loading-text">불러오는 중…</span></div>
+    <div id="retry-banner">
+      <div class="retry-icon">⚠️</div>
+      <div class="retry-text">
+        <div class="retry-title">학교 데이터를 불러오지 못했습니다</div>
+        <div class="retry-sub" id="retry-sub-text">인터넷 연결을 확인하고 다시 시도해보세요.</div>
+      </div>
+      <button id="retry-btn">다시 시도</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   1) 데이터 소스: 캘리포니아 교육부(CDE) 공식 ArcGIS 학교 위치 서비스
+   - 2025-26학년도 캘리포니아 전체 공립학교, CDE가 좌표를 직접 검증한 레이어
+   - Esri ArcGIS Online 인프라 (CORS 완전 지원, 브라우저 직접 호출 설계)
+   - CountyName='San Diego' 서버측 필터로 카운티 전체를 요청 1번에 수신
+   ========================================================================= */
+const ARCGIS_URL = "https://services3.arcgis.com/fdvHcZVgB2QSRNkL/arcgis/rest/services/SchoolSites2526/FeatureServer/0/query";
+const ARCGIS_FIELDS = "SchoolName,SchoolLevel,SchoolType,DistrictName,Street,City,Zip,Latitude,Longitude,Charter,GradeLow,GradeHigh,EnrollTotal";
+const MAX_PER_REQUEST = 2000; // 서비스 상한. SD 카운티는 ~800개라 1회로 충분하지만 페이지네이션도 대비.
+
+async function fetchCountySchools(){
+  let all = [];
+  let offset = 0;
+  for(let page = 0; page < 5; page++){ // 안전상 최대 5페이지(1만개)까지만
+    const params = new URLSearchParams({
+      where: "CountyName='San Diego' AND Status='Active'",
+      outFields: ARCGIS_FIELDS,
+      returnGeometry: "false",
+      f: "json",
+      orderByFields: "SchoolName",
+      resultRecordCount: String(MAX_PER_REQUEST),
+      resultOffset: String(offset)
+    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    let res;
+    try{
+      res = await fetch(ARCGIS_URL + "?" + params.toString(), { signal: controller.signal });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    if(!res.ok) throw new Error("ArcGIS 응답 오류 (HTTP " + res.status + ")");
+    const data = await res.json();
+    if(data.error) throw new Error("ArcGIS 오류: " + (data.error.message || JSON.stringify(data.error)));
+    const feats = data.features || [];
+    all = all.concat(feats);
+    if(!data.exceededTransferLimit || feats.length === 0) break;
+    offset += feats.length;
+  }
+  return all;
+}
+
+// CDE SchoolLevel → 앱 내부 분류
+function classifyLevel(level, gradeLow, gradeHigh){
+  const l = (level || "").toLowerCase();
+  if(l.includes("elem")) return "elem";
+  if(l.includes("middle") || l.includes("junior") || l.includes("intermediate")) return "middle";
+  if(l.includes("high")) return "high";
+  // K-12 등 복합형은 학년 범위로 재판정
+  if(gradeLow === "K" || gradeLow === "TK") return "elem";
+  if(gradeHigh === "12") return "high";
+  return "other";
+}
+
+function parseArcgisFeatures(features){
+  const out = [];
+  for(const f of features){
+    const a = f.attributes || {};
+    if(!a.SchoolName || a.Latitude == null || a.Longitude == null) continue;
+    const stype = (a.SchoolType || "").toLowerCase();
+    if(stype.includes("adult")) continue; // 성인교육기관 제외
+    out.push({
+      name: a.SchoolName,
+      level: classifyLevel(a.SchoolLevel, a.GradeLow, a.GradeHigh),
+      district: a.DistrictName || "",
+      grades: (a.GradeLow && a.GradeHigh) ? (a.GradeLow + "-" + a.GradeHigh) : "",
+      address: [a.Street, a.City, a.Zip].filter(Boolean).join(", "),
+      charter: a.Charter === "Y",
+      enroll: a.EnrollTotal || null,
+      lat: a.Latitude, lng: a.Longitude
+    });
+  }
+  return out;
+}
+
+const LEVEL_LABEL = {elem:"초등", middle:"중등", high:"고등", other:"기타"};
+const LEVEL_BADGE = {elem:"badge-elem", middle:"badge-middle", high:"badge-high", other:"badge-other"};
+const LEVEL_ICON = {elem:"🎒", middle:"📘", high:"🎓", other:"🏫"};
+
+/* ---------- 캐시 (30일) ---------- */
+const CACHE_KEY = "sd_school_finder_arcgis_v1";
+const CACHE_TTL = 30*24*60*60*1000;
+function loadSchoolCache(){
+  try{
+    const raw = localStorage.getItem(CACHE_KEY);
+    if(!raw) return null;
+    const p = JSON.parse(raw);
+    if(Date.now() - p.t > CACHE_TTL) return null;
+    return (p.schools && p.schools.length > 0) ? p.schools : null;
+  }catch(e){ return null; }
+}
+function saveSchoolCache(schools){
+  try{ if(schools.length > 0) localStorage.setItem(CACHE_KEY, JSON.stringify({t: Date.now(), schools})); }
+  catch(e){ console.warn("캐시 저장 실패:", e); }
+}
+
+/* =========================================================================
+   2) 집 주소 지오코딩 (Photon 우선 → Nominatim 폴백) — 검증된 기존 로직
+   ========================================================================= */
+const SD_BOUNDS = { minLat:32.4, maxLat:33.6, minLng:-117.7, maxLng:-115.9 };
+function inSD(lat,lng){ return lat>=SD_BOUNDS.minLat && lat<=SD_BOUNDS.maxLat && lng>=SD_BOUNDS.minLng && lng<=SD_BOUNDS.maxLng; }
+
+async function geocodeViaPhoton(addr){
+  const res = await fetch("https://photon.komoot.io/api/?limit=1&q=" + encodeURIComponent(addr));
+  if(!res.ok) throw new Error("photon http " + res.status);
+  const d = await res.json();
+  const f = d.features && d.features[0];
+  if(!f) throw new Error("photon no result");
+  return { lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] };
+}
+async function geocodeViaNominatim(addr){
+  const res = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=" + encodeURIComponent(addr), { headers: {"Accept-Language":"en"} });
+  if(!res.ok) throw new Error("nominatim http " + res.status);
+  const d = await res.json();
+  if(!d.length) throw new Error("nominatim no result");
+  return { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
+}
+async function geocodeHome(addr){
+  let r;
+  try{
+    r = await geocodeViaPhoton(addr);
+    if(!inSD(r.lat, r.lng)) throw new Error("범위 밖");
+  }catch(e){
+    r = await geocodeViaNominatim(addr);
+    if(!inSD(r.lat, r.lng)) throw new Error("샌디에고 밖 주소: " + addr);
+  }
+  return r;
+}
+
+/* =========================================================================
+   3) 지도
+   ========================================================================= */
+const map = L.map('map', { zoomControl:false }).setView([32.9, -117.15], 10);
+L.control.zoom({ position:'bottomright' }).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution:'&copy; OpenStreetMap &copy; CARTO', subdomains:'abcd', maxZoom:19
+}).addTo(map);
+
+const markerCluster = L.markerClusterGroup({
+  showCoverageOnHover:false, spiderfyOnMaxZoom:true, maxClusterRadius:55,
+  iconCreateFunction: c => {
+    const n = c.getChildCount();
+    const cls = n >= 60 ? 'large' : (n >= 15 ? 'mid' : '');
+    return L.divIcon({ html:`<div class="cluster-pin ${cls}"><span>${n}</span></div>`, className:'', iconSize:[40,40] });
+  }
+});
+map.addLayer(markerCluster);
+
+function makeIcon(level){
+  return L.divIcon({ className:'', html:`<div class="school-pin ${level}"><span>${LEVEL_ICON[level]}</span></div>`, iconSize:[28,28], iconAnchor:[14,27], popupAnchor:[0,-26] });
+}
+const homeIcon = L.divIcon({ className:'', html:`<div class="home-pin">🏠</div>`, iconSize:[34,34], iconAnchor:[17,17], popupAnchor:[0,-17] });
+
+let SCHOOLS = [];
+let homeCoords = null;
+let homeMarker = null;
+const schoolMarkers = [];
+
+function haversineMiles(la1,lo1,la2,lo2){
+  const R=3958.8, r=d=>d*Math.PI/180;
+  const dLa=r(la2-la1), dLo=r(lo2-lo1);
+  const a=Math.sin(dLa/2)**2 + Math.cos(r(la1))*Math.cos(r(la2))*Math.sin(dLo/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function fmtCoord(lat,lng){ return lat.toFixed(5)+", "+lng.toFixed(5); }
+
+/* ---------- 좌표 패널 ---------- */
+const roName=document.getElementById('ro-name'), roCoords=document.getElementById('ro-coords'), roHint=document.getElementById('ro-hint');
+const readout=document.getElementById('coord-readout');
+function showReadout(name,lat,lng,hint){
+  roName.textContent=name; roCoords.textContent=fmtCoord(lat,lng); roHint.textContent=hint||"";
+  readout.classList.remove('hidden');
+}
+document.getElementById('readout-close').addEventListener('click', ()=>readout.classList.add('hidden'));
+map.on('click', e=>showReadout("클릭한 지점", e.latlng.lat, e.latlng.lng, "지도를 클릭하면 좌표가 표시됩니다"));
+
+const toast=document.getElementById('loading-toast'), toastText=document.getElementById('loading-text');
+function showToast(t){ toastText.textContent=t; toast.classList.add('show'); }
+function hideToast(){ toast.classList.remove('show'); }
+const retryBanner=document.getElementById('retry-banner');
+const retrySub=document.getElementById('retry-sub-text');
+
+/* =========================================================================
+   4) 필터 / 리스트 (전부 클라이언트측 — 재쿼리 없음)
+   ========================================================================= */
+let levelFilter='all', radiusMiles=10, nameQuery='';
+let selectedSchool=null;
+const LIST_CAP=200;
+
+function passesFilters(s){
+  if(levelFilter!=='all' && s.level!==levelFilter) return false;
+  if(nameQuery && !s.name.toLowerCase().includes(nameQuery)) return false;
+  if(homeCoords && radiusMiles < 9999){
+    if(s._dist === undefined) s._dist = haversineMiles(homeCoords.lat, homeCoords.lng, s.lat, s.lng);
+    if(s._dist > radiusMiles) return false;
+  }
+  return true;
+}
+function recomputeDistances(){
+  SCHOOLS.forEach(s=>{ s._dist = homeCoords ? haversineMiles(homeCoords.lat,homeCoords.lng,s.lat,s.lng) : undefined; });
+}
+
+function popupHtml(s){
+  const dist = (homeCoords && s._dist!==undefined) ? `<div class="popup-row">🏠 집에서 <b>${s._dist.toFixed(1)} mi</b></div>` : "";
+  const enroll = s.enroll ? `<div class="popup-row">👥 재학생 ${s.enroll.toLocaleString()}명</div>` : "";
+  return `<div class="popup-name">${s.name}</div>
+    <div class="popup-addr">${s.address}</div>
+    <div class="popup-row">${LEVEL_LABEL[s.level]}${s.grades? " ("+s.grades+")":""} · ${s.district}</div>
+    ${s.charter? '<div class="popup-row">🏷️ 차터스쿨</div>':''}
+    ${enroll}${dist}
+    <div class="popup-coord">${fmtCoord(s.lat,s.lng)}</div>`;
+}
+
+function rebuildMarkers(){
+  markerCluster.clearLayers();
+  schoolMarkers.length=0;
+  SCHOOLS.filter(passesFilters).forEach(s=>{
+    const m = L.marker([s.lat,s.lng], { icon:makeIcon(s.level) });
+    m.bindPopup(popupHtml(s));
+    m.on('click', ()=>{ selectedSchool=s; renderList(); });
+    schoolMarkers.push({school:s, marker:m});
+    markerCluster.addLayer(m);
+  });
+}
+
+function renderList(){
+  const list=document.getElementById('school-list');
+  if(SCHOOLS.length===0){
+    list.innerHTML=`<div class="empty-state">학교 데이터를 불러오는 중이거나 아직 없습니다.</div>`;
+    return;
+  }
+  let arr = SCHOOLS.filter(passesFilters);
+  if(homeCoords) arr.sort((a,b)=>a._dist-b._dist);
+  else arr.sort((a,b)=>a.name.localeCompare(b.name));
+
+  if(arr.length===0){
+    list.innerHTML=`<div class="empty-state">조건에 맞는 학교가 없습니다.<br>거리 범위를 넓히거나 필터를 조정해 보세요.</div>`;
+    return;
+  }
+  const shown = arr.slice(0, LIST_CAP);
+  const meta = homeCoords ? `집에서 가까운 순 · ${arr.length}개` : `이름순 · ${arr.length}개 (집 주소 입력 시 거리순)`;
+  let html = `<div class="list-meta">${meta}</div>`;
+  shown.forEach(s=>{
+    const dist = s._dist!==undefined ? s._dist.toFixed(1)+" mi" : "";
+    html += `<div class="school-card ${selectedSchool===s?'selected':''}" data-key="${s.lat}_${s.lng}_${s.name.replace(/"/g,'&quot;')}">
+      <div class="card-top"><div class="card-name">${s.name}</div>${dist?`<div class="card-dist">${dist}</div>`:''}</div>
+      <div class="card-addr">${s.address}</div>
+      <div class="badge-row">
+        <span class="badge ${LEVEL_BADGE[s.level]}">${LEVEL_LABEL[s.level]}${s.grades? ' · '+s.grades:''}</span>
+        ${s.charter? '<span class="badge badge-charter">차터</span>':''}
+      </div>
+      <div class="card-coord">${fmtCoord(s.lat,s.lng)}</div>
+    </div>`;
+  });
+  if(arr.length>LIST_CAP) html += `<div class="list-cap-note">가까운 순 ${LIST_CAP}개만 목록에 표시됩니다.<br>지도에서는 전체를 볼 수 있어요.</div>`;
+  list.innerHTML=html;
+
+  list.querySelectorAll('.school-card').forEach(card=>{
+    card.addEventListener('click', ()=>{
+      const key=card.dataset.key;
+      const s=SCHOOLS.find(x=>(x.lat+"_"+x.lng+"_"+x.name)===key);
+      if(s) selectSchool(s);
+    });
+  });
+}
+
+function selectSchool(s){
+  selectedSchool=s;
+  renderList();
+  const e=schoolMarkers.find(m=>m.school===s);
+  if(e) markerCluster.zoomToShowLayer(e.marker, ()=>e.marker.openPopup());
+}
+
+document.querySelectorAll('#level-filter button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#level-filter button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); levelFilter=b.dataset.level;
+  rebuildMarkers(); renderList();
+}));
+document.querySelectorAll('#radius-filter button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#radius-filter button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); radiusMiles=parseInt(b.dataset.radius,10);
+  rebuildMarkers(); renderList();
+}));
+document.getElementById('name-search').addEventListener('input', e=>{
+  nameQuery=e.target.value.trim().toLowerCase();
+  rebuildMarkers(); renderList();
+});
+
+/* =========================================================================
+   5) 집 주소
+   ========================================================================= */
+const homeInput=document.getElementById('home-input');
+const homeBtn=document.getElementById('home-btn');
+const homeStatus=document.getElementById('home-status');
+
+async function setHome(addr){
+  homeStatus.className='home-status'; homeStatus.textContent='주소 검색 중…';
+  homeBtn.disabled=true;
+  try{
+    const c = await geocodeHome(addr);
+    homeCoords=c;
+    if(homeMarker) map.removeLayer(homeMarker);
+    homeMarker = L.marker([c.lat,c.lng], {icon:homeIcon}).addTo(map);
+    homeMarker.bindPopup(`<div class="popup-name">🏠 우리 집</div><div class="popup-addr">${addr}</div><div class="popup-coord">${fmtCoord(c.lat,c.lng)}</div>`);
+    map.flyTo([c.lat,c.lng], 12, {duration:0.7});
+    homeStatus.className='home-status ok';
+    homeStatus.innerHTML=`✓ 집 위치 설정됨 <span class="coord-pill">${fmtCoord(c.lat,c.lng)}</span>`;
+    recomputeDistances();
+    rebuildMarkers();
+    renderList();
+    schoolMarkers.forEach(({school,marker})=>marker.setPopupContent(popupHtml(school)));
+  }catch(err){
+    homeStatus.className='home-status err';
+    homeStatus.textContent='주소를 찾을 수 없습니다. 더 구체적으로 입력해보세요.';
+    console.error(err);
+  }finally{ homeBtn.disabled=false; }
+}
+homeBtn.addEventListener('click', ()=>{ const v=homeInput.value.trim(); if(v) setHome(v); });
+homeInput.addEventListener('keydown', e=>{ if(e.key==='Enter') homeBtn.click(); });
+
+/* =========================================================================
+   6) 초기 로딩
+   ========================================================================= */
+async function loadSchools(force){
+  retryBanner.classList.remove('show');
+  if(!force){
+    const cached = loadSchoolCache();
+    if(cached){
+      SCHOOLS = cached;
+      console.log("캐시에서 학교", SCHOOLS.length, "개 로드");
+      afterLoad();
+      return;
+    }
+  }
+  showToast("샌디에고 카운티 전체 학교 불러오는 중… (최초 1회)");
+  try{
+    const feats = await fetchCountySchools();
+    SCHOOLS = parseArcgisFeatures(feats);
+    console.log(`ArcGIS 원본 ${feats.length}건 → 파싱 ${SCHOOLS.length}건`);
+    saveSchoolCache(SCHOOLS);
+    hideToast();
+    if(SCHOOLS.length===0){
+      retrySub.textContent = "서버 응답은 왔지만 학교가 0건입니다. 다시 시도해보세요.";
+      retryBanner.classList.add('show');
+      return;
+    }
+    afterLoad();
+  }catch(err){
+    console.error(err);
+    hideToast();
+    retrySub.textContent = "실패 원인: " + (err.name==='AbortError'?'시간 초과(25초)':err.message);
+    retryBanner.classList.add('show');
+  }
+}
+function afterLoad(){
+  recomputeDistances();
+  rebuildMarkers();
+  renderList();
+  if(homeInput.value.trim() && !homeCoords) setHome(homeInput.value.trim());
+}
+document.getElementById('retry-btn').addEventListener('click', ()=>loadSchools(true));
+
+loadSchools(false);
+</script>
+</body>
+</html>
